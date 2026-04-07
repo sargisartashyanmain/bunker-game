@@ -30,12 +30,13 @@
     }
 
     const config = [
-        { key: 'professions', label: 'Профессия' },
-        { key: 'health',      label: 'Здоровье' },
-        { key: 'baggage',     label: 'Багаж' },
-        { key: 'hobbies',     label: 'Хобби' },
-        { key: 'phobia',      label: 'Фобия' }
-    ];
+    { key: 'professions',   label: 'Профессия' },
+    { key: 'health',        label: 'Здоровье' },
+    { key: 'baggage',       label: 'Багаж' },
+    { key: 'hobbies',       label: 'Хобби' },
+    { key: 'phobia',        label: 'Фобия' },
+    { key: 'special_cards', label: 'СПЕЦ-КАРТА' } // Добавили новую строку
+];
 
     const list = document.getElementById('traits-list');
     const idDisplay = document.getElementById('player-id');
