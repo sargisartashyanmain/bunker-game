@@ -1,88 +1,152 @@
+// Global game constants
+const GAME_CONFIG = {
+    CONFIG_TRAITS: [
+        { key: 'professions',   label: 'Профессия' },
+        { key: 'health',        label: 'Здоровье' },
+        { key: 'baggage',       label: 'Багаж' },
+        { key: 'hobbies',       label: 'Хобби' },
+        { key: 'phobia',        label: 'Фобия' },
+        { key: 'special_cards', label: 'СПЕЦ-КАРТА' }
+    ],
+    DEFAULT_TRAIT_COUNT: 6,
+    BLUR_AMOUNT: 18,
+    VIBRATE_DURATION: 10,
+    VIBRATE_DISASTER: [40, 60, 40],
+    DEFAULT_ID: '1',
+    CONTENT_JSON_PATH: 'data/content.json'
+};
+
 (async function initBunkerApp() {
+    // Destructure constants
+    const { CONFIG_TRAITS, DEFAULT_TRAIT_COUNT, VIBRATE_DURATION, DEFAULT_ID, CONTENT_JSON_PATH } = GAME_CONFIG;
+    const DEFAULT_INDICES = new Array(DEFAULT_TRAIT_COUNT).fill(0);
+
+    // State
+    let isGameReady = false;
     const params = new URLSearchParams(window.location.search);
     const encodedData = params.get('data');
     
-    let myId = '1';
-    let indices = [0, 0, 0, 0, 0];
+    let myId = DEFAULT_ID;
+    let indices = [...DEFAULT_INDICES];
 
-    // ДЕКОДИРОВАНИЕ BASE64
+    // Decode URL data
     if (encodedData) {
         try {
-            // b64 -> string -> JSON
             const decodedString = atob(encodedData);
             const parsed = JSON.parse(decodedString);
-            
-            myId = String(parsed.my || '1');
-            indices = parsed.p || [0, 0, 0, 0, 0];
-        } catch (e) {
-            console.error("Ошибка декодирования данных. Проверьте URL.");
+            myId = String(parsed.my ?? DEFAULT_ID);
+            indices = parsed.p ?? [...DEFAULT_INDICES];
+        } catch (error) {
+            console.error("URL decode error:", error.message);
         }
     }
 
+    // Load game database
     window.gameDB = null;
-
     try {
-        const response = await fetch('data/content.json');
+        const response = await fetch(CONTENT_JSON_PATH);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         window.gameDB = await response.json();
-    } catch (e) {
-        console.error("Критическая ошибка: JSON не загружен");
+        isGameReady = true;
+    } catch (error) {
+        console.error("Critical error loading game data:", error.message);
+        showErrorState();
         return;
     }
 
-    const config = [
-    { key: 'professions',   label: 'Профессия' },
-    { key: 'health',        label: 'Здоровье' },
-    { key: 'baggage',       label: 'Багаж' },
-    { key: 'hobbies',       label: 'Хобби' },
-    { key: 'phobia',        label: 'Фобия' },
-    { key: 'special_cards', label: 'СПЕЦ-КАРТА' } // Добавили новую строку
-];
-
-    const list = document.getElementById('traits-list');
+    // Render player ID
     const idDisplay = document.getElementById('player-id');
-    if (idDisplay) idDisplay.innerText = `ID-${myId.padStart(2, '0')}`;
+    if (idDisplay) {
+        idDisplay.textContent = `ID-${myId.padStart(2, '0')}`;
+    }
 
+    // Render traits
+    const list = document.getElementById('traits-list');
     if (list) {
-        config.forEach((item, i) => {
-            const valIndex = indices[i] || 0;
-            const text = (window.gameDB[item.key] && window.gameDB[item.key][valIndex]) 
-                         ? window.gameDB[item.key][valIndex] 
-                         : "---";
+        CONFIG_TRAITS.forEach((item, i) => {
+            const valIndex = indices[i] ?? 0;
+            const traitArray = window.gameDB?.[item.key];
+            const traitValue = (Array.isArray(traitArray) && traitArray[valIndex]) 
+                ? traitArray[valIndex] 
+                : "---";
 
             const div = document.createElement('div');
             div.className = 'trait';
-            div.onclick = function() { 
-                this.classList.toggle('open'); 
-                const status = this.querySelector('.status-box');
-                if (status) status.innerText = this.classList.contains('open') ? 'OPEN' : 'LOCKED';
-                if(navigator.vibrate) navigator.vibrate(10); 
-            };
+            div.addEventListener('click', handleTraitClick);
             
-            div.innerHTML = `
-                <div class="status-box">LOCKED</div>
-                <div class="label">${item.label}</div>
-                <div class="value">${text}</div>
-            `;
+            // Build structure safely
+            const statusBox = document.createElement('div');
+            statusBox.className = 'status-box';
+            statusBox.textContent = 'LOCKED';
+            
+            const label = document.createElement('div');
+            label.className = 'label';
+            label.textContent = item.label;
+            
+            const value = document.createElement('div');
+            value.className = 'value';
+            value.textContent = traitValue;
+            
+            div.appendChild(statusBox);
+            div.appendChild(label);
+            div.appendChild(value);
             list.appendChild(div);
         });
     }
+
+    // Trait click handler
+    function handleTraitClick() {
+        this.classList.toggle('open');
+        const status = this.querySelector('.status-box');
+        if (status) {
+            status.textContent = this.classList.contains('open') ? 'OPEN' : 'LOCKED';
+        }
+        if (navigator.vibrate) {
+            navigator.vibrate(VIBRATE_DURATION);
+        }
+    }
+
+    // Error state
+    function showErrorState() {
+        const list = document.getElementById('traits-list');
+        const btn = document.querySelector('.disaster-btn');
+        if (list) {
+            list.innerHTML = '<div style="color: red; padding: 20px;">Ошибка загрузки данных</div>';
+        }
+        if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+        }
+    }
+
+    // Enable disaster button
+    const disasterBtn = document.querySelector('.disaster-btn');
+    if (disasterBtn) {
+        disasterBtn.disabled = !isGameReady;
+    }
 })();
 
-// Функции модалки (без изменений)
-function openDisaster() {
-    if (!window.gameDB) return;
+// Modal functions
+window.openDisaster = function() {
+    if (!window.gameDB?.disasters?.length) {
+        console.warn('Disasters data not available');
+        return;
+    }
     const modal = document.getElementById('disaster-modal');
-    const randomD = window.gameDB.disasters[Math.floor(Math.random() * window.gameDB.disasters.length)];
-    document.getElementById('d-title').innerText = randomD.title.toUpperCase();
-    document.getElementById('d-desc').innerText = randomD.description;
-    modal.style.display = "block";
-    if(navigator.vibrate) navigator.vibrate([40, 60, 40]);
-}
+    const disasters = window.gameDB.disasters;
+    const randomD = disasters[Math.floor(Math.random() * disasters.length)];
+    
+    const titleEl = document.getElementById('d-title');
+    const descEl = document.getElementById('d-desc');
+    
+    if (titleEl) titleEl.textContent = randomD.title.toUpperCase();
+    if (descEl) descEl.textContent = randomD.description;
+    
+    if (modal) modal.style.display = 'block';
+    if (navigator.vibrate) navigator.vibrate(GAME_CONFIG.VIBRATE_DISASTER);
+};
 
-function closeDisaster() {
-    document.getElementById('disaster-modal').style.display = "none";
-}
-
-const obj = { my: 1, p: [10, 4, 2, 1, 3] };
-const base64 = btoa(JSON.stringify(obj));
-console.log("Твоя ссылка: index.html?data=" + base64);
+window.closeDisaster = function() {
+    const modal = document.getElementById('disaster-modal');
+    if (modal) modal.style.display = 'none';
+};
